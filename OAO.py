@@ -7,10 +7,10 @@ from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
-st.set_page_config(layout="wide", page_title="時空交通路段分析")
-st.title("交通路線路段速度視覺化")
+st.set_page_config(layout="wide", page_title="時空路段速度分析")
+st.title("交通路線路段速度畫圖上")
 
-uploaded_file = st.sidebar.file_uploader("請上傳 ready_to_plot.xlsx", type=["xlsx"])
+uploaded_file = st.sidebar.file_uploader("請上傳檔案要xlsx", type=["xlsx"])
 
 # Viridis 顏色轉換函數
 cmap = plt.get_cmap('viridis')
@@ -31,10 +31,10 @@ if uploaded_file is not None:
     
     # --- 新增：側邊欄選單 ---
     all_routes = df['路線'].unique().tolist()
-    selected_routes = st.sidebar.multiselect("請選擇路線", all_routes, default=all_routes)
+    selected_routes = st.sidebar.multiselect("選擇路線", all_routes, default=all_routes)
     
     all_times = sorted(df['時間'].astype(str).unique().tolist())
-    selected_time = st.sidebar.selectbox("請選擇觀測時間", all_times)
+    selected_time = st.sidebar.selectbox("選擇時間", all_times)
     
     # --- 新增：根據選單過濾數據 ---
     filtered_df = df[(df['路線'].isin(selected_routes)) & (df['時間'].astype(str) == selected_time)]
