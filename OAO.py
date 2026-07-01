@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 import streamlit as st
 import pandas as pd
 import folium
@@ -79,7 +79,7 @@ if uploaded_file is not None:
                 prev_m = target_m
                 
         st_folium(m, width=1000, height=600)
-=======
+
 import streamlit as st #網頁
 import pandas as pd #資料處理
 import folium #地圖
@@ -151,4 +151,4 @@ if uploaded_file is not None:   ##檢查使用者是否成功上傳檔案
             prev_m = target_m #將當前行的里程點值存儲到prev_m變數中，以便在下一次迴圈中使用。
             
     st_folium(m, width=1000, height=600) #在網頁上顯示地圖，並設置地圖的寬度和高度。
->>>>>>> 86d68d51657aabda008cf1224c993801f5870e11
+
