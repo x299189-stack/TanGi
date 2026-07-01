@@ -88,8 +88,8 @@ def render_map_area(df):
 
 
 def render_analysis_area():
-    st.subheader("📊 交通流量分析系統")
-    uploaded_file = st.file_uploader("請上傳您的 2016 行交通流量 Excel 檔案", type=["xlsx"])
+    st.subheader("📊 尖峰離峰分析")
+    uploaded_file = st.file_uploader("上傳交通流量 Excel 檔案", type=["xlsx"])
     
     if uploaded_file is not None:
         try:
