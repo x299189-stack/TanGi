@@ -19,8 +19,8 @@ def get_google_color(speed, min_s, max_s):
     norm = max(0, min(1, norm)) 
     return mcolors.to_hex(cmap(norm))
 
+@st.cache_data(show_spinner=False)
 
-# 計算路徑累計距離
 def get_path_with_distances(coords):
     distances = [0.0]
     for i in range(len(coords) - 1):
@@ -28,13 +28,20 @@ def get_path_with_distances(coords):
         distances.append(distances[-1] + d)
     return coords, distances
 
-# --- 側邊欄 ---
+@st.cache_data(show_spinner=False)
+def fetch_route_coords(start_lng, start_lat, end_lng, end_lat):
+    url = f"http://router.project-osrm.org/route/v1/driving/{start_lng},{start_lat};{end_lng},{end_lat}?overview=full&geometries=geojson"
+    return requests.get(url).json()['routes'][0]['geometry']['coordinates']
+
+
+
+
+
 uploaded_file = st.sidebar.file_uploader("請上傳檔案要xlsx", type=["xlsx"], key="file_uploade_main")
 
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
     
-    # 建立選單
     all_routes = df['路線'].unique().tolist()
     selected_routes = st.sidebar.multiselect("選擇路線", all_routes, default=all_routes, key="route_select")
     
@@ -48,30 +55,27 @@ if uploaded_file is not None:
     if filtered_df.empty:
         st.warning("所選條件下無數據，請重新選擇！")
     else:
-        # 使用過濾後的資料範圍，確保顏色對比度足夠
         min_speed, max_speed = filtered_df['速度'].min(), filtered_df['速度'].max()
         
 
-        
-        # --- 在側邊欄顯示顏色對照表 (Legend) ---
         st.sidebar.markdown("### 速度顏色對照")
-        # 切分四個區間來顯示
+       
         steps = [min_speed + (max_speed - min_speed) * i / 4 for i in range(5)]
         for i in range(4):
             low, high = steps[i], steps[i+1]
             color = get_google_color((low + high) / 2, min_speed, max_speed)
             st.sidebar.markdown(f"**{int(low)} - {int(high)} km/h**: <span style='color:{color}'>●</span>", unsafe_allow_html=True)
 
-        m = folium.Map(location=[filtered_df['起點緯度'].mean(), filtered_df['起點經度'].mean()], zoom_start=15)
+        m = folium.Map(location=[24.1477, 120.6736], zoom_start=12)
 
         for route_name in filtered_df['路線'].unique():
             sub_df = filtered_df[filtered_df['路線'] == route_name]
             base = sub_df.iloc[0]
-            
-            # OSRM 路徑規劃
-            url = f"http://router.project-osrm.org/route/v1/driving/{base['起點經度']},{base['起點緯度']};{base['終點經度']},{base['終點緯度']}?overview=full&geometries=geojson"
-            coords = requests.get(url).json()['routes'][0]['geometry']['coordinates']
+
+            coords = fetch_route_coords(base['起點經度'], base['起點緯度'], base['終點經度'], base['終點緯度'])
             coords, dists = get_path_with_distances(coords)
+            
+        
             
             prev_m = 0
             last_coord = None
@@ -96,4 +100,5 @@ if uploaded_file is not None:
                 
                 prev_m = target_m
                 
+        m.fit_bounds(m.get_bounds())    
         st_folium(m, width=1000, height=600)
