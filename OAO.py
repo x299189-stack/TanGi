@@ -6,6 +6,7 @@ import requests
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import io
 
 st.set_page_config(layout="wide", page_title="時空路段速度分析")
 st.title("交通路線路段速度視覺化")
@@ -41,24 +42,31 @@ template_df = pd.DataFrame({
     "時間": ["08:00", "09:00"],
     "里程點": [0, 500], 
     "速度": [40, 25],
-    "起點經度": [120.6, 120.6],  
-    "起點緯度": [24.1, 24.1],    
+    "起點經度": [120.6, 120.6], 
+    "起點緯度": [24.1, 24.1], 
     "終點經度": [120.65, 120.65], 
-    "終點緯度": [24.15, 24.15]    
+    "終點緯度": [24.15, 24.15]
 })
-csv = template_df.to_csv(index=False).encode('utf-8')
-st.sidebar.download_button("📥 下載標準格式範本", csv, "data_template.csv", "text/csv")
+
+buffer = io.BytesIO()
+with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+    template_df.to_excel(writer, index=False, sheet_name='Sheet1')
+
+st.sidebar.download_button(
+    label="📥 下載 Excel 格式範本",
+    data=buffer.getvalue(),
+    file_name="transport_data_template.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
     
-    # 2. 加入防呆機制：檢查欄位
     required_cols = ['路線', '時間', '里程點', '速度', '起點經度', '起點緯度', '終點經度', '終點緯度']
     if not all(col in df.columns for col in required_cols):
         st.error(f"❌ 檔案格式錯誤！請確認包含以下欄位：\n{', '.join(required_cols)}")
-        st.stop() # 這裡非常重要，程式會在這裡停止，不會去跑後面的錯誤程式碼
+        st.stop() 
     
-    # 3. 檢查通過後，再顯示成功訊息並進行後續處理
     st.success("✅ 檔案讀取成功！")
     
     # --- 原本的分析邏輯從這裡開始 ---
