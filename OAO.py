@@ -11,6 +11,7 @@ import numpy as np
 import plotly.express as px
 import holidays
 from datetime import datetime
+import os
 
 
 
@@ -172,6 +173,392 @@ def render_analysis_area(df_input, start_date):
                     st.table(res_df.sort_values(by=col_name, ascending=False))
         
 #################################################################
+def get_clean_master_data(base_path):
+    all_data = []
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        if not os.path.exists(dir_path): continue
+            
+        for file in os.listdir(dir_path):
+            if file.endswith(".xlsx"):
+                df = pd.read_excel(os.path.join(dir_path, file), usecols=['時間', '車當量'])
+                date_str = f"2026-{file[:2]}-{file[2:4]}"
+                df['日期'] = date_str
+                df['方向'] = direction
+                all_data.append(df)
+    
+    if not all_data: return None
+    
+    df_all = pd.concat(all_data, ignore_index=True)
+    df_all['時間戳記'] = pd.to_datetime(df_all['日期'] + ' ' + df_all['時間'].astype(str))
+    
+    start, end = df_all['時間戳記'].min(), df_all['時間戳記'].max()
+    full_range = pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq='15min')[:-1]
+    
+    results = {}
+    for direction in ["順向", "逆向"]:
+        sub = df_all[df_all['方向'] == direction].set_index('時間戳記')
+        results[direction] = sub['車當量'].reindex(full_range, fill_value=0)
+    
+    df_final = pd.DataFrame(results)
+    df_final['加總車當量'] = df_final['順向'] + df_final['逆向']
+    df_final = df_final.reset_index().rename(columns={'index': '時間戳記'})
+    df_final['日期'] = df_final['時間戳記'].dt.strftime('%Y-%m-%d')
+    df_final['時間'] = df_final['時間戳記'].dt.strftime('%H:%M:%S')
+    
+    return df_final[['日期', '時間', '順向', '逆向', '加總車當量']]
+    all_data = []
+    
+    # 1. 遍歷資料夾
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        if not os.path.exists(dir_path):
+            st.error(f"找不到資料夾: {dir_path}")
+            continue
+            
+        files = [f for f in os.listdir(dir_path) if f.endswith(".xlsx")]
+        for file in files:
+            try:
+                df = pd.read_excel(os.path.join(dir_path, file), usecols=['時間', '車當量'])
+                date_str = f"2026-{file[:2]}-{file[2:4]}"
+                df['日期'] = date_str
+                df['方向'] = direction
+                all_data.append(df)
+            except Exception as e:
+                st.warning(f"無法讀取檔案 {file}: {e}")
+    
+    if not all_data:
+        st.error("沒有讀取到任何資料！")
+        return None
+
+    df_all = pd.concat(all_data, ignore_index=True)
+    df_all['時間戳記'] = pd.to_datetime(df_all['日期'] + ' ' + df_all['時間'].astype(str))
+
+    start = df_all['時間戳記'].min()
+    end = df_all['時間戳記'].max()
+    full_range = pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq='15min')[:-1]
+    results = {}
+    for direction in ["順向", "逆向"]:
+        sub = df_all[df_all['方向'] == direction].set_index('時間戳記')
+        results[direction] = sub['車當量'].reindex(full_range, fill_value=0)
+    
+    df_final = pd.DataFrame(results)
+    df_final['加總車當量'] = df_final['順向'] + df_final['逆向']
+ 
+    df_final = df_final.reset_index()
+    df_final['日期'] = df_final['index'].dt.strftime('%Y-%m-%d')
+    df_final['時間'] = df_final['index'].dt.strftime('%H:%M:%S')
+    
+    return df_final.drop(columns=['index'])
+    all_data = []
+
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        if not os.path.exists(dir_path): 
+            st.warning(f"找不到資料夾: {dir_path}")
+            continue
+            
+        for file in os.listdir(dir_path):
+            if file.endswith(".xlsx"):
+                file_path = os.path.join(dir_path, file)
+                df = pd.read_excel(file_path, usecols=['時間', '車當量'])
+                date_str = f"2026-{file[:2]}-{file[2:4]}"
+                
+                df['日期'] = date_str
+                df['方向'] = direction
+                all_data.append(df)
+    
+    if not all_data:
+        return None
+    
+    df_all = pd.concat(all_data, ignore_index=True)
+    
+    start_date = pd.to_datetime(df_all['日期']).min()
+    end_date = pd.to_datetime(df_all['日期']).max()
+    
+    full_time_range = pd.date_range(start=start_date, end=end_date + pd.Timedelta(days=1), freq='15min')[:-1]
+    
+    master_df = pd.DataFrame({'時間戳記': full_time_range})
+    master_df['日期'] = master_df['時間戳記'].dt.strftime('%Y-%m-%d')
+    master_df['時間'] = master_df['時間戳記'].dt.strftime('%H:%M:%S')
+    
+
+    df_all['時間戳記'] = pd.to_datetime(df_all['日期'] + ' ' + df_all['時間'].astype(str))
+    
+
+    merged_df = pd.merge(master_df, df_all, on=['日期', '時間'], how='left')
+    
+
+    df_pivot = merged_df.pivot_table(
+        index=['日期', '時間'], 
+        columns='方向', 
+        values='車當量', 
+        aggfunc='sum'
+    ).fillna(0) 
+    
+    df_pivot['加總車當量'] = df_pivot['順向'] + df_pivot['逆向']
+    
+    return df_pivot.reset_index()
+    all_data = []
+    
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        st.write(f"正在檢查路徑: {dir_path}") 
+        
+        if not os.path.exists(dir_path):
+            st.warning(f"找不到資料夾: {dir_path}")
+            continue
+            
+        files = [f for f in os.listdir(dir_path) if f.endswith(".xlsx")]
+        st.write(f"在 {direction} 資料夾找到 {len(files)} 個檔案") # 偵錯：顯示檔案數
+        
+        for file in files:
+            file_path = os.path.join(dir_path, file)
+            df = pd.read_excel(file_path, usecols=['時間', '車當量'])
+            
+            date_str = f"2026-{file[:2]}-{file[2:4]}"
+            df['日期'] = date_str
+            df['方向'] = direction
+            all_data.append(df)
+    
+    st.write(f"總共收集到 {len(all_data)} 個 Excel 檔案的資料")
+    
+    if not all_data: return None
+    
+    df_all = pd.concat(all_data, ignore_index=True)
+    st.write(f"合併後的總行數: {len(df_all)}") 
+    
+    df_pivot = df_all.pivot_table(
+        index=['日期', '時間'], 
+        columns='方向', 
+        values='車當量', 
+        aggfunc='sum'
+    ).fillna(0)
+    
+    df_pivot['加總車當量'] = df_pivot['順向'] + df_pivot['逆向']
+    return df_pivot.reset_index()
+    all_data = [] 
+    
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        if not os.path.exists(dir_path): continue
+            
+        for file in os.listdir(dir_path):
+            if file.endswith(".xlsx"):
+                df = pd.read_excel(os.path.join(dir_path, file), usecols=['時間', '車當量'])
+                
+                date_str = f"2026-{file[:2]}-{file[2:4]}"
+                
+                df['日期'] = date_str
+                df['方向'] = direction
+                
+                all_data.append(df)
+    
+
+    if not all_data:
+        return None
+    
+    df_all = pd.concat(all_data, ignore_index=True)
+    
+    df_all['時間戳記'] = pd.to_datetime(df_all['日期'] + ' ' + df_all['時間'].astype(str))
+    
+
+    df_pivot = df_all.pivot_table(
+        index=['日期', '時間'], 
+        columns='方向', 
+        values='車當量', 
+        aggfunc='sum'
+    ).fillna(0) 
+    
+    df_pivot['加總車當量'] = df_pivot['順向'] + df_pivot['逆向']
+    
+    return df_pivot.reset_index()
+    all_data = []
+    
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        if not os.path.exists(dir_path): continue
+            
+        for file in os.listdir(dir_path):
+            if file.endswith(".xlsx"):
+                df = pd.read_excel(os.path.join(dir_path, file), usecols=['時間', '車當量'])
+                date_str = f"2026-{file[:2]}-{file[2:4]}"
+                df['日期'] = date_str
+                df['方向'] = direction
+                all_data.append(df)
+
+    if not all_data: return None
+    
+    df_all = pd.concat(all_data, ignore_index=True)
+    
+
+    unique_dates = df_all['日期'].nunique()
+    total_expected = unique_dates * 96 
+    
+    st.write(f"系統偵測到共 {unique_dates} 個資料檔，預期總筆數: {total_expected}")
+    
+
+    df_pivot = df_all.pivot_table(
+        index=['日期', '時間'], 
+        columns='方向', 
+        values='車當量', 
+        aggfunc='sum'
+    ).fillna(0)
+    
+    df_pivot['加總車當量'] = df_pivot['順向'] + df_pivot['逆向']
+    
+    return df_pivot.reset_index()
+
+    master_list = []
+    
+
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        if not os.path.exists(dir_path): continue
+            
+        for file in os.listdir(dir_path):
+            if file.endswith(".xlsx"):
+                df = pd.read_excel(os.path.join(dir_path, file), usecols=['時間', '車當量'])
+                
+                date_str = f"2026-{file[:2]}-{file[2:4]}"
+                
+                df['日期'] = date_str
+                df['方向'] = direction
+                df['車當量_填入'] = df['車當量']
+                
+                master_list.append(df[['日期', '時間', '方向', '車當量_填入']])
+    
+    df_all = pd.concat(master_list, ignore_index=True)
+    
+    df_pivot = df_all.pivot_table(
+        index=['日期', '時間'], 
+        columns='方向', 
+        values='車當量_填入', 
+        aggfunc='sum'
+    ).fillna(0) 
+    
+    df_pivot['加總車當量'] = df_pivot['順向'] + df_pivot['逆向']
+    
+    return df_pivot.reset_index()
+    all_data = []
+    
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        if not os.path.exists(dir_path): continue
+            
+        for file in os.listdir(dir_path):
+            if file.endswith(".xlsx"):
+                df = pd.read_excel(os.path.join(dir_path, file), usecols=['時間', '車當量'])
+                date_str = f"2026-{file[:2]}-{file[2:4]}"
+                
+                df['時間戳記'] = pd.to_datetime(f"{date_str} " + df['時間'].astype(str))
+                df['方向'] = direction
+                all_data.append(df)
+    
+    df_combined = pd.concat(all_data, ignore_index=True)
+    
+    all_time_index = pd.date_range(start=df_combined['時間戳記'].min(), 
+                                   end=df_combined['時間戳記'].max(), 
+                                   freq='15min')
+    
+
+    results = {}
+    for direction in ["順向", "逆向"]:
+        sub = df_combined[df_combined['方向'] == direction]
+        grouped = sub.groupby('時間戳記')['車當量'].sum()
+        results[direction] = grouped.reindex(all_time_index, fill_value=0)
+        
+    df_final = pd.DataFrame(results)
+    df_final['加總'] = df_final['順向'] + df_final['逆向']
+    
+    return df_final.reset_index().rename(columns={'index': '時間戳記'})
+    all_data = []
+    
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        if not os.path.exists(dir_path): continue
+            
+        for file in os.listdir(dir_path):
+            if file.endswith(".xlsx"):
+                df = pd.read_excel(os.path.join(dir_path, file), usecols=['時間', '車當量'])
+                date_str = f"2026-{file[:2]}-{file[2:4]}"
+                full_time_index = pd.date_range(start=f"{date_str} 00:00", end=f"{date_str} 23:45", freq='15min')
+                
+                df['時間戳記'] = pd.to_datetime(f"{date_str} " + df['時間'].astype(str))
+                df = df.set_index('時間戳記').reindex(full_time_index, fill_value=0)
+                
+                df['方向'] = direction 
+                df['日期'] = date_str
+                all_data.append(df) 
+    
+    df_combined = pd.concat(all_data)
+    
+    df_wide = df_combined.pivot_table(index=df_combined.index, columns='方向', values='車當量', aggfunc='sum')
+    df_wide['加總'] = df_wide['順向'] + df_wide['逆向']
+    
+    return df_wide.reset_index()
+    all_data = []
+
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        if not os.path.exists(dir_path): continue
+            
+        for file in os.listdir(dir_path):
+            if file.endswith(".xlsx"):
+                df = pd.read_excel(os.path.join(dir_path, file), usecols=['時間', '車當量'])
+
+                date_str = f"2026-{file[:2]}-{file[2:4]}"
+                
+
+                full_time_index = pd.date_range(start=f"{date_str} 00:00", end=f"{date_str} 23:45", freq='15min')
+                df['時間戳記'] = pd.to_datetime(f"{date_str} " + df['時間'].astype(str))
+                
+                df = df.set_index('時間戳記').reindex(full_time_index, fill_value=0)
+                df['方向'] = direction
+                all_data.append(df)
+    
+    if not all_data:
+        return None
+        
+    df_final = pd.concat(all_data)
+    
+    df_wide = df_final.pivot_table(index=df_final.index, columns='方向', values='車當量', aggfunc='sum')
+    df_wide['加總'] = df_wide['順向'] + df_wide['逆向']
+    
+    return df_wide.reset_index().rename(columns={'index': '時間戳記'})
+    all_data = []
+    for direction in ["順向", "逆向"]:
+        dir_path = os.path.join(base_path, direction)
+        if not os.path.exists(dir_path):
+            continue
+            
+        for file in os.listdir(dir_path):
+            if file.endswith(".xlsx"):
+                df_temp = pd.read_excel(os.path.join(dir_path, file))
+                df_temp['日期'] = file.replace('.xlsx', '')
+                df_temp['方向'] = direction
+                all_data.append(df_temp)
+    
+    if not all_data:
+        return None
+        
+    df_merged = pd.concat(all_data, ignore_index=True)
+    
+    df_merged['時間戳記'] = pd.to_datetime(df_merged['日期'].astype(str) + ' ' + df_merged['時間'].astype(str))
+    
+
+    start = df_merged['時間戳記'].min().date()
+    end = df_merged['時間戳記'].max().date()
+    full_range = pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq='15min')[:-1]
+    
+    df_final = pd.DataFrame(index=full_range)
+    for direction in ["順向", "逆向"]:
+        sub = df_merged[df_merged['方向'] == direction].set_index('時間戳記')
+        df_final[direction] = sub['車當量'].reindex(full_range, fill_value=0)
+        
+    df_final['加總'] = df_final['順向'] + df_final['逆向']
+    return df_final.reset_index().rename(columns={'index': '時間'})
+##################################################################
 
 with tab_map:
     col_up, col_dl = st.columns([2, 1])
@@ -208,5 +595,31 @@ with tab_analysis:
 
         render_analysis_area(df, start_date)
     
-############################################################################################################################
-
+#####################################################################
+with tab_merge:
+    st.subheader("📂 批量資料夾匯入")
+    folder_path = st.text_input("請輸入包含「順向/逆向」資料夾的路徑：")
+    
+    if st.button("執行合併與清洗"):
+        if folder_path:
+            df_result = get_clean_master_data(folder_path)
+            if df_result is not None:
+                st.session_state['df_main'] = df_result
+                st.success("合併完成！")
+                st.dataframe(df_result) # 顯示表格
+                
+                # --- 新增：產生下載按鈕 ---
+                # 這裡將 df 轉成 Excel 二進位流
+                from io import BytesIO
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    df_result.to_excel(writer, index=False)
+                
+                st.download_button(
+                    label="📥 下載處理好的 Excel 檔",
+                    data=output.getvalue(),
+                    file_name="交通流量分析資料.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            else:
+                st.error("未能讀取資料，請檢查路徑或檔案格式。")
