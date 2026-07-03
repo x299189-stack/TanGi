@@ -20,7 +20,7 @@ st.title("交通路線路段速度視覺化")
 # --- 顏色設定 ---
 google_colors = ["#17DE97", "#FFD600", "#FF5252", "#9A0007"]
 cmap = mcolors.LinearSegmentedColormap.from_list("google_map_cmap", google_colors)
-
+#####################################################################
 def get_google_color(speed, min_s, max_s):
     norm = (max_s - speed) / (max_s - min_s + 1e-9)
     norm = max(0, min(1, norm))
@@ -38,16 +38,12 @@ def get_path_with_distances(coords):
 def fetch_route_coords(start_lng, start_lat, end_lng, end_lat):
     url = f"http://router.project-osrm.org/route/v1/driving/{start_lng},{start_lat};{end_lng},{end_lat}?overview=full&geometries=geojson"
     return requests.get(url).json()['routes'][0]['geometry']['coordinates']
+##################################################################
 
-# --- 分頁結構 ---
-
-tab_map, tab_analysis,tab_settings = st.tabs([
-    "🗺️ 路段速度地圖", "📈 尖峰離峰判定", "⚙️ 系統設定"
+tab_map, tab_analysis,tab_merge = st.tabs([
+    "🗺️ 路段速度地圖", "📈 尖峰離峰判定", "⚙️ 尖峰離峰資料合併"
 ])
-
-# --- 地圖分頁邏輯 ---
-
-# --- 定義碎片化繪圖函式 ---
+##################################################################
 
 @st.fragment
 def render_map_area(df):
@@ -58,10 +54,28 @@ def render_map_area(df):
     with col2:
         all_times = sorted(df['時間'].astype(str).unique().tolist())
         selected_time = st.selectbox("選擇時間", all_times)
+    
     filtered_df = df[(df['路線'].isin(selected_routes)) & (df['時間'].astype(str) == selected_time)].sort_values(['路線', '里程點'])
+    
     if not filtered_df.empty:
         min_speed, max_speed = filtered_df['速度'].min(), filtered_df['速度'].max()
+        
+        # --- 修改區塊開始 ---
+        # 建立地圖，不直接指定 tiles
         m = folium.Map(location=[24.1477, 120.6736], zoom_start=12)
+        
+        folium.TileLayer("cartodbpositron", name="極簡模式").add_to(m)
+    
+    # 2. 衛星影像版 (使用 Esri World Imagery)
+        folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri",
+        name="衛星影像模式"
+        ).add_to(m)
+        
+        folium.LayerControl(position='topright').add_to(m)
+
+
         for route_name in filtered_df['路線'].unique():
             sub_df = filtered_df[filtered_df['路線'] == route_name]
             base = sub_df.iloc[0]
@@ -69,24 +83,23 @@ def render_map_area(df):
             coords, dists = get_path_with_distances(coords)
             prev_m = 0
             last_coord = None
+            
             for _, row in sub_df.iterrows():
                 target_m = row['里程點']
                 sub_coords = [coords[i] for i, d in enumerate(dists) if prev_m <= d <= target_m]
                 if last_coord and sub_coords: sub_coords.insert(0, last_coord)
                 if sub_coords:
-                    folium.PolyLine(locations=[(c[1], c[0]) for c in sub_coords],
-                                   color=get_google_color(row['速度'], min_speed, max_speed),
-                                    weight=6, opacity=0.9).add_to(m)
+                    # 這裡保持你原本正確的繪圖邏輯
+                    folium.PolyLine(locations=[(lat, lon) for lon, lat in sub_coords],
+                                       color=get_google_color(row['速度'], min_speed, max_speed),
+                                       weight=6, opacity=0.9).add_to(m)
                     last_coord = sub_coords[-1]
                 prev_m = target_m
-
-       
 
         m.fit_bounds(m.get_bounds())
         st_folium(m, width=1000, height=600)
     else:
         st.warning("所選條件下無數據")
-
 
 def render_analysis_area(df_input, start_date):
 
@@ -97,8 +110,6 @@ def render_analysis_area(df_input, start_date):
             df['日期時間'] = pd.to_datetime(df['日期'].astype(str) + ' ' + df['時間'].astype(str))
     
 
-
-            # --- 功能 1：繪製趨勢圖 ---
             st.write("### 1. 21天車當量趨勢圖")
             fig = px.line(df, x='日期時間', y=['順向', '逆向', '加總'],
                           labels={'value': '車當量', 'variable': '類型'},
@@ -106,38 +117,28 @@ def render_analysis_area(df_input, start_date):
             fig.update_layout(hovermode="x unified", template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- 功能 2：分項交通流量最繁忙的六大時段 ---
-            # 在資料讀取後，加入一個選擇器
             st.sidebar.header("資料分析設定")
             freq_type = st.sidebar.selectbox("請選擇資料紀錄頻率：", ["每15分鐘 (96筆/天)", "每小時 (24筆/天)"])
 
-# --- 功能 2：每日尖峰頻率累積統計 (嚴格過濾版) ---
-          # --- 功能 2：滾動式整點流量尖峰累積統計 ---
-            # --- 功能 2：每日滾動加總尖峰出現頻率 (增加平日/假日篩選) ---
             st.write(f"### 2. 統計結果 ({freq_type})")
 
-            # 1. 新增：平日/假日選項
             day_filter = st.radio("選擇統計區間：", ["總和", "平日", "假日"], horizontal=True)
 
-            # 2. 定義判定與篩選
-            from collections import defaultdict # 直接寫在裡面確保絕對不遺失
+            from collections import defaultdict
             
             def is_holiday(date_val):
                 tw_holidays = holidays.TW()
                 return '假日' if (pd.to_datetime(date_val).weekday() >= 5 or pd.to_datetime(date_val) in tw_holidays) else '平日'
 
-            # 產生標記 (確保只做一次)
             if '日期類型' not in df.columns:
                 df['日期類型'] = df['日期'].apply(is_holiday)
 
-            # 篩選資料
             df_process_base = df.copy()
             if day_filter == "平日":
                 df_process_base = df[df['日期類型'] == '平日'].copy()
             elif day_filter == "假日":
                 df_process_base = df[df['日期類型'] == '假日'].copy()
 
-            # 3. 頻率處理邏輯 (滾動視窗)
             if "每小時" in freq_type:
                 df_process = df_process_base.copy()
                 df_process[['順向', '逆向', '加總']] = df_process[['順向', '逆向', '加總']].rolling(window=4).sum()
@@ -147,37 +148,30 @@ def render_analysis_area(df_input, start_date):
                 df_process = df_process_base.copy()
                 records_per_day = 96
 
-            # --- 新增：顯示具體假日/平日日期清單 ---
             unique_dates = pd.to_datetime(df_process_base['日期']).dt.date.unique()
             
-            # 使用 expander 讓日期清單可以收合，保持介面清爽
             with st.expander(f"點擊查看包含的具體日期 ({len(unique_dates)} 天)"):
-                # 將日期格式化並顯示出來
                 date_str_list = [d.strftime('%m/%d') for d in sorted(unique_dates)]
                 st.write(", ".join(date_str_list))
 
-            # 4. 核心計數 (精確對齊)
             counts = {'順向': defaultdict(int), '逆向': defaultdict(int), '加總': defaultdict(int)}
             
-            # 使用篩選後的長度除以每天的筆數，確保天數對齊
             n_days = len(df_process) // records_per_day
             for d in range(n_days):
                 day_data = df_process.iloc[d*records_per_day : (d+1)*records_per_day]
                 
-                # 這裡就是最一開始的邏輯：每天固定取 6 名
                 for col in ['順向', '逆向', '加總']:
                     top6 = day_data.nlargest(6, col)['時間'].astype(str)
                     for t in top6:
                         counts[col][t] += 1
             
-            # 5. 顯示結果
             tabs = st.tabs(['順向', '逆向', '加總'])
             for i, col_name in enumerate(['順向', '逆向', '加總']):
                 with tabs[i]:
                     res_df = pd.DataFrame.from_dict(counts[col_name], orient='index', columns=[col_name])
                     st.table(res_df.sort_values(by=col_name, ascending=False))
         
-# --- 主分頁結構 ---
+#################################################################
 
 with tab_map:
     col_up, col_dl = st.columns([2, 1])
@@ -193,30 +187,26 @@ with tab_map:
     if uploaded_file:
         df = pd.read_excel(uploaded_file)
         render_map_area(df)
-# 呼叫碎片化函式###########################
-############################################################################################################################3
+
 ######################$#####################################################################################################
 
 with tab_analysis:
     st.subheader("📊 尖峰離峰分析")
-    # 1. 檔案上傳放在最外面
     uploaded_file = st.file_uploader("上傳交通流量 Excel 檔案", type=["xlsx"])
-    
-    # 2. 日期選擇器也在外面
+
     start_date = st.date_input("請選擇資料開始日期", value=pd.to_datetime("2026-06-01"),key="unique_start_date_key")
 
     if uploaded_file is not None:
-        # 3. 讀取並清洗資料
         df = pd.read_excel(uploaded_file)
         df.columns = df.columns.astype(str).str.strip()
         
-        # 統一欄位名稱
         rename_map = {'時間': '時間', 'Time': '時間', 'time': '時間',
                       '順向': '順向', 'forword': '順向', 'forward': '順向',
                       '逆向': '逆向', 'inverse': '逆向',
                       '加總': '加總', 'add': '加總', '總': '加總'}
         df = df.rename(columns=rename_map)
-        
-        # 4. 把處理好的 df 和 start_date 傳進去
+
         render_analysis_area(df, start_date)
     
+############################################################################################################################
+
