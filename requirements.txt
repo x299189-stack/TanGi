@@ -8,4 +8,4 @@ matplotlib
 openpyxl
 xlsxwriter
 plotly
-holiday
+holidays
