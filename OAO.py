@@ -13,9 +13,6 @@ import holidays
 from datetime import datetime
 import os
 
-
-
-
 st.set_page_config(layout="wide", page_title="交通分析系統")
 st.title("交通路線路段速度視覺化")
 # --- 顏色設定 ---
@@ -102,6 +99,7 @@ def render_map_area(df):
     else:
         st.warning("所選條件下無數據")
 
+###############################################################
 def render_analysis_area(df_input, start_date):
 
             records_per_day = 96
@@ -599,6 +597,10 @@ with tab_analysis:
 with tab_merge:
     st.subheader("📂 批量資料夾匯入")
     folder_path = st.text_input("請輸入包含「順向/逆向」資料夾的路徑：")
+
+    folder_path = folder_path.strip() # 去除可能多出的空白
+    if not os.path.isdir(folder_path):
+        st.error(f"路徑無效，請檢查：{folder_path}")
     
     if st.button("執行合併與清洗"):
         if folder_path:
