@@ -9,7 +9,8 @@ import matplotlib.colors as mcolors
 import io
 import numpy as np
 import plotly.express as px
-
+import holidays
+from datetime import datetime
 
 
 
@@ -87,29 +88,15 @@ def render_map_area(df):
         st.warning("所選條件下無數據")
 
 
-def render_analysis_area():
-    st.subheader("📊 尖峰離峰分析")
-    uploaded_file = st.file_uploader("上傳交通流量 Excel 檔案", type=["xlsx"])
-    
-    if uploaded_file is not None:
-        try:
-            # 讀取並處理資料
-            df = pd.read_excel(uploaded_file)
-            df.columns = df.columns.astype(str).str.strip()
-            
-            # 統一欄位名稱
-            rename_map = {'時間': '時間', 'Time': '時間', 'time': '時間',
-                          '順向': '順向', 'forword': '順向', 'forward': '順向',
-                          '逆向': '逆向', 'inverse': '逆向',
-                          '加總': '加總', 'add': '加總', '總': '加總'}
-            df = df.rename(columns=rename_map)
-            
-            # 日期標記
+def render_analysis_area(df_input, start_date):
+
             records_per_day = 96
-            num_days = 21
-            dates = pd.date_range(start="2026-06-01", periods=num_days, freq="D")
+            num_days = len(df) // records_per_day
+            dates = pd.date_range(start=start_date, periods=num_days + 1, freq="D")
             df['日期'] = np.repeat(dates, records_per_day)[:len(df)]
             df['日期時間'] = pd.to_datetime(df['日期'].astype(str) + ' ' + df['時間'].astype(str))
+    
+
 
             # --- 功能 1：繪製趨勢圖 ---
             st.write("### 1. 21天車當量趨勢圖")
@@ -120,26 +107,76 @@ def render_analysis_area():
             st.plotly_chart(fig, use_container_width=True)
 
             # --- 功能 2：分項交通流量最繁忙的六大時段 ---
-            st.write("### 2. 分項交通流量最繁忙的六大時段")
-            cols_to_analyze = ['順向', '逆向', '加總']
-            tabs = st.tabs(cols_to_analyze)
-            
-            for i, col_name in enumerate(cols_to_analyze):
-                with tabs[i]:
-                    # 計算門檻與統計
-                    threshold = df[col_name].mean()
-                    busy_df = df[df[col_name] > threshold]
-                    top_times = busy_df['時間'].value_counts().head(6).reset_index()
-                    top_times.columns = ['時段', '出現次數']
-                    
-                    st.write(f"#### {col_name} 最繁忙時段")
-                    st.table(top_times)
-            
-            st.info("💡 統計說明：分別統計過去21天內，該類別流量超過各自平均值的次數排行。")
+            # 在資料讀取後，加入一個選擇器
+            st.sidebar.header("資料分析設定")
+            freq_type = st.sidebar.selectbox("請選擇資料紀錄頻率：", ["每15分鐘 (96筆/天)", "每小時 (24筆/天)"])
 
-        except Exception as e:
-            # 這是捕捉錯誤的關鍵，這樣程式才不會噴 SyntaxError
-            st.error(f"分析過程中出現錯誤: {e}")
+# --- 功能 2：每日尖峰頻率累積統計 (嚴格過濾版) ---
+          # --- 功能 2：滾動式整點流量尖峰累積統計 ---
+            # --- 功能 2：每日滾動加總尖峰出現頻率 (增加平日/假日篩選) ---
+            st.write(f"### 2. 統計結果 ({freq_type})")
+
+            # 1. 新增：平日/假日選項
+            day_filter = st.radio("選擇統計區間：", ["總和", "平日", "假日"], horizontal=True)
+
+            # 2. 定義判定與篩選
+            from collections import defaultdict # 直接寫在裡面確保絕對不遺失
+            
+            def is_holiday(date_val):
+                tw_holidays = holidays.TW()
+                return '假日' if (pd.to_datetime(date_val).weekday() >= 5 or pd.to_datetime(date_val) in tw_holidays) else '平日'
+
+            # 產生標記 (確保只做一次)
+            if '日期類型' not in df.columns:
+                df['日期類型'] = df['日期'].apply(is_holiday)
+
+            # 篩選資料
+            df_process_base = df.copy()
+            if day_filter == "平日":
+                df_process_base = df[df['日期類型'] == '平日'].copy()
+            elif day_filter == "假日":
+                df_process_base = df[df['日期類型'] == '假日'].copy()
+
+            # 3. 頻率處理邏輯 (滾動視窗)
+            if "每小時" in freq_type:
+                df_process = df_process_base.copy()
+                df_process[['順向', '逆向', '加總']] = df_process[['順向', '逆向', '加總']].rolling(window=4).sum()
+                df_process = df_process[df_process['時間'].astype(str).str.contains(r'00:00$')]
+                records_per_day = 24
+            else:
+                df_process = df_process_base.copy()
+                records_per_day = 96
+
+            # --- 新增：顯示具體假日/平日日期清單 ---
+            unique_dates = pd.to_datetime(df_process_base['日期']).dt.date.unique()
+            
+            # 使用 expander 讓日期清單可以收合，保持介面清爽
+            with st.expander(f"點擊查看包含的具體日期 ({len(unique_dates)} 天)"):
+                # 將日期格式化並顯示出來
+                date_str_list = [d.strftime('%m/%d') for d in sorted(unique_dates)]
+                st.write(", ".join(date_str_list))
+
+            # 4. 核心計數 (精確對齊)
+            counts = {'順向': defaultdict(int), '逆向': defaultdict(int), '加總': defaultdict(int)}
+            
+            # 使用篩選後的長度除以每天的筆數，確保天數對齊
+            n_days = len(df_process) // records_per_day
+            for d in range(n_days):
+                day_data = df_process.iloc[d*records_per_day : (d+1)*records_per_day]
+                
+                # 這裡就是最一開始的邏輯：每天固定取 6 名
+                for col in ['順向', '逆向', '加總']:
+                    top6 = day_data.nlargest(6, col)['時間'].astype(str)
+                    for t in top6:
+                        counts[col][t] += 1
+            
+            # 5. 顯示結果
+            tabs = st.tabs(['順向', '逆向', '加總'])
+            for i, col_name in enumerate(['順向', '逆向', '加總']):
+                with tabs[i]:
+                    res_df = pd.DataFrame.from_dict(counts[col_name], orient='index', columns=[col_name])
+                    st.table(res_df.sort_values(by=col_name, ascending=False))
+        
 # --- 主分頁結構 ---
 
 with tab_map:
@@ -157,7 +194,29 @@ with tab_map:
         df = pd.read_excel(uploaded_file)
         render_map_area(df)
 # 呼叫碎片化函式###########################
-####################################################################################################
+############################################################################################################################3
+######################$#####################################################################################################
 
 with tab_analysis:
-    render_analysis_area()
+    st.subheader("📊 尖峰離峰分析")
+    # 1. 檔案上傳放在最外面
+    uploaded_file = st.file_uploader("上傳交通流量 Excel 檔案", type=["xlsx"])
+    
+    # 2. 日期選擇器也在外面
+    start_date = st.date_input("請選擇資料開始日期", value=pd.to_datetime("2026-06-01"),key="unique_start_date_key")
+
+    if uploaded_file is not None:
+        # 3. 讀取並清洗資料
+        df = pd.read_excel(uploaded_file)
+        df.columns = df.columns.astype(str).str.strip()
+        
+        # 統一欄位名稱
+        rename_map = {'時間': '時間', 'Time': '時間', 'time': '時間',
+                      '順向': '順向', 'forword': '順向', 'forward': '順向',
+                      '逆向': '逆向', 'inverse': '逆向',
+                      '加總': '加總', 'add': '加總', '總': '加總'}
+        df = df.rename(columns=rename_map)
+        
+        # 4. 把處理好的 df 和 start_date 傳進去
+        render_analysis_area(df, start_date)
+    
