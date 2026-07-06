@@ -15,6 +15,8 @@ import os
 import tempfile 
 import zipfile
 import uuid
+import shutil 
+import glob   
 
 
 st.set_page_config(layout="wide", page_title="交通分析系統")
@@ -605,6 +607,13 @@ with tab_merge:
     uploaded_zip = st.file_uploader("請上傳 .zip 壓縮檔", type=["zip"])
     if uploaded_zip and st.button("執行合併與清洗", key="final_merge_btn"):
         
+
+        for folder in glob.glob("work_folder_*"):
+            if os.path.isdir(folder):
+                try:
+                    shutil.rmtree(folder)
+                except:
+                    pass 
         
         unique_id = uuid.uuid4().hex[:8]
         work_dir = os.path.join(os.getcwd(), f"work_folder_{unique_id}")
