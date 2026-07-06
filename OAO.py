@@ -114,9 +114,9 @@ def render_analysis_area(df_input, start_date):
     
 
             st.write("### 1. 21天車當量趨勢圖")
-            fig = px.line(df, x='日期時間', y=['順向', '逆向', '加總'],
+            fig = px.line(df, x='日期時間', y=['順樁', '逆樁', '加總'],
                           labels={'value': '車當量', 'variable': '類型'},
-                          color_discrete_map={'順向': '#1f77b4', '逆向': '#2ca02c', '加總': '#d62728'})
+                          color_discrete_map={'順樁': '#1f77b4', '逆樁': '#2ca02c', '加總': '#d62728'})
             fig.update_layout(hovermode="x unified", template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -144,7 +144,7 @@ def render_analysis_area(df_input, start_date):
 
             if "每小時" in freq_type:
                 df_process = df_process_base.copy()
-                df_process[['順向', '逆向', '加總']] = df_process[['順向', '逆向', '加總']].rolling(window=4).sum()
+                df_process[['順樁', '逆樁', '加總']] = df_process[['順樁', '逆樁', '加總']].rolling(window=4).sum()
                 df_process = df_process[df_process['時間'].astype(str).str.contains(r'00:00$')]
                 records_per_day = 24
             else:
@@ -157,19 +157,19 @@ def render_analysis_area(df_input, start_date):
                 date_str_list = [d.strftime('%m/%d') for d in sorted(unique_dates)]
                 st.write(", ".join(date_str_list))
 
-            counts = {'順向': defaultdict(int), '逆向': defaultdict(int), '加總': defaultdict(int)}
+            counts = {'順樁': defaultdict(int), '逆樁': defaultdict(int), '加總': defaultdict(int)}
             
             n_days = len(df_process) // records_per_day
             for d in range(n_days):
                 day_data = df_process.iloc[d*records_per_day : (d+1)*records_per_day]
                 
-                for col in ['順向', '逆向', '加總']:
+                for col in ['順樁', '逆樁', '加總']:
                     top6 = day_data.nlargest(6, col)['時間'].astype(str)
                     for t in top6:
                         counts[col][t] += 1
             
-            tabs = st.tabs(['順向', '逆向', '加總'])
-            for i, col_name in enumerate(['順向', '逆向', '加總']):
+            tabs = st.tabs(['順樁', '逆樁', '加總'])
+            for i, col_name in enumerate(['順樁', '逆樁', '加總']):
                 with tabs[i]:
                     res_df = pd.DataFrame.from_dict(counts[col_name], orient='index', columns=[col_name])
                     st.table(res_df.sort_values(by=col_name, ascending=False))
@@ -198,21 +198,21 @@ def get_clean_master_data(base_path):
     full_range = pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq='15min')[:-1]
     
     results = {}
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         sub = df_all[df_all['方向'] == direction].set_index('時間戳記')
         results[direction] = sub['車當量'].reindex(full_range, fill_value=0)
     
     df_final = pd.DataFrame(results)
-    df_final['加總車當量'] = df_final['順向'] + df_final['逆向']
+    df_final['加總車當量'] = df_final['順樁'] + df_final['逆樁']
     df_final = df_final.reset_index().rename(columns={'index': '時間戳記'})
     df_final['日期'] = df_final['時間戳記'].dt.strftime('%Y-%m-%d')
     df_final['時間'] = df_final['時間戳記'].dt.strftime('%H:%M:%S')
     
-    return df_final[['日期', '時間', '順向', '逆向', '加總車當量']]
+    return df_final[['日期', '時間', '順樁', '逆樁', '加總車當量']]
     all_data = []
     
     # 1. 遍歷資料夾
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         if not os.path.exists(dir_path):
             st.error(f"找不到資料夾: {dir_path}")
@@ -240,7 +240,7 @@ def get_clean_master_data(base_path):
     end = df_all['時間戳記'].max()
     full_range = pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq='15min')[:-1]
     results = {}
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         sub = df_all[df_all['方向'] == direction].set_index('時間戳記')
         results[direction] = sub['車當量'].reindex(full_range, fill_value=0)
     
@@ -254,7 +254,7 @@ def get_clean_master_data(base_path):
     return df_final.drop(columns=['index'])
     all_data = []
 
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         if not os.path.exists(dir_path): 
             st.warning(f"找不到資料夾: {dir_path}")
@@ -298,12 +298,12 @@ def get_clean_master_data(base_path):
         aggfunc='sum'
     ).fillna(0) 
     
-    df_pivot['加總車當量'] = df_pivot['順向'] + df_pivot['逆向']
+    df_pivot['加總車當量'] = df_pivot['順樁'] + df_pivot['逆樁']
     
     return df_pivot.reset_index()
     all_data = []
     
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         st.write(f"正在檢查路徑: {dir_path}") 
         
@@ -337,11 +337,11 @@ def get_clean_master_data(base_path):
         aggfunc='sum'
     ).fillna(0)
     
-    df_pivot['加總車當量'] = df_pivot['順向'] + df_pivot['逆向']
+    df_pivot['加總車當量'] = df_pivot['順樁'] + df_pivot['逆樁']
     return df_pivot.reset_index()
     all_data = [] 
     
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         if not os.path.exists(dir_path): continue
             
@@ -372,12 +372,12 @@ def get_clean_master_data(base_path):
         aggfunc='sum'
     ).fillna(0) 
     
-    df_pivot['加總車當量'] = df_pivot['順向'] + df_pivot['逆向']
+    df_pivot['加總車當量'] = df_pivot['順樁'] + df_pivot['逆樁']
     
     return df_pivot.reset_index()
     all_data = []
     
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         if not os.path.exists(dir_path): continue
             
@@ -407,14 +407,14 @@ def get_clean_master_data(base_path):
         aggfunc='sum'
     ).fillna(0)
     
-    df_pivot['加總車當量'] = df_pivot['順向'] + df_pivot['逆向']
+    df_pivot['加總車當量'] = df_pivot['順樁'] + df_pivot['逆樁']
     
     return df_pivot.reset_index()
 
     master_list = []
     
 
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         if not os.path.exists(dir_path): continue
             
@@ -439,12 +439,12 @@ def get_clean_master_data(base_path):
         aggfunc='sum'
     ).fillna(0) 
     
-    df_pivot['加總車當量'] = df_pivot['順向'] + df_pivot['逆向']
+    df_pivot['加總車當量'] = df_pivot['順樁'] + df_pivot['逆樁']
     
     return df_pivot.reset_index()
     all_data = []
     
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         if not os.path.exists(dir_path): continue
             
@@ -465,18 +465,18 @@ def get_clean_master_data(base_path):
     
 
     results = {}
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         sub = df_combined[df_combined['方向'] == direction]
         grouped = sub.groupby('時間戳記')['車當量'].sum()
         results[direction] = grouped.reindex(all_time_index, fill_value=0)
         
     df_final = pd.DataFrame(results)
-    df_final['加總'] = df_final['順向'] + df_final['逆向']
+    df_final['加總'] = df_final['順樁'] + df_final['逆樁']
     
     return df_final.reset_index().rename(columns={'index': '時間戳記'})
     all_data = []
     
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         if not os.path.exists(dir_path): continue
             
@@ -496,12 +496,12 @@ def get_clean_master_data(base_path):
     df_combined = pd.concat(all_data)
     
     df_wide = df_combined.pivot_table(index=df_combined.index, columns='方向', values='車當量', aggfunc='sum')
-    df_wide['加總'] = df_wide['順向'] + df_wide['逆向']
+    df_wide['加總'] = df_wide['順樁'] + df_wide['逆樁']
     
     return df_wide.reset_index()
     all_data = []
 
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         if not os.path.exists(dir_path): continue
             
@@ -525,11 +525,11 @@ def get_clean_master_data(base_path):
     df_final = pd.concat(all_data)
     
     df_wide = df_final.pivot_table(index=df_final.index, columns='方向', values='車當量', aggfunc='sum')
-    df_wide['加總'] = df_wide['順向'] + df_wide['逆向']
+    df_wide['加總'] = df_wide['順樁'] + df_wide['逆樁']
     
     return df_wide.reset_index().rename(columns={'index': '時間戳記'})
     all_data = []
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         if not os.path.exists(dir_path):
             continue
@@ -554,11 +554,11 @@ def get_clean_master_data(base_path):
     full_range = pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq='15min')[:-1]
     
     df_final = pd.DataFrame(index=full_range)
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         sub = df_merged[df_merged['方向'] == direction].set_index('時間戳記')
         df_final[direction] = sub['車當量'].reindex(full_range, fill_value=0)
         
-    df_final['加總'] = df_final['順向'] + df_final['逆向']
+    df_final['加總'] = df_final['順樁'] + df_final['逆樁']
     return df_final.reset_index().rename(columns={'index': '時間'})
 ##################################################################
 
@@ -590,8 +590,8 @@ with tab_analysis:
         df.columns = df.columns.astype(str).str.strip()
         
         rename_map = {'時間': '時間', 'Time': '時間', 'time': '時間',
-                      '順向': '順向', 'forword': '順向', 'forward': '順向',
-                      '逆向': '逆向', 'inverse': '逆向',
+                      '順樁': '順樁', 'forword': '順樁', 'forward': '順樁',
+                      '逆樁': '逆樁', 'inverse': '逆樁',
                       '加總': '加總', 'add': '加總', '加總車當量': '加總'}
         df = df.rename(columns=rename_map)
 
