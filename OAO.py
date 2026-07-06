@@ -14,6 +14,8 @@ from datetime import datetime
 import os
 import tempfile 
 import zipfile
+import uuid
+
 
 st.set_page_config(layout="wide", page_title="交通分析系統")
 st.title("交通路線路段速度視覺化")
@@ -596,33 +598,46 @@ with tab_analysis:
         render_analysis_area(df, start_date)
     
 #####################################################################
-import uuid # 放在檔案最上方
+ 
 
 with tab_merge:
     st.subheader("📂 批量資料夾匯入")
-    uploaded_zip = st.file_uploader("請上傳資料夾的壓縮檔 (.zip)", type=["zip"])
+    uploaded_zip = st.file_uploader("請上傳 .zip 壓縮檔", type=["zip"])
     
+    # 1. 執行合併的邏輯
     if uploaded_zip and st.button("執行合併與清洗", key="final_merge_btn"):
         import zipfile
-        import os
+        import uuid
         
-        # 1. 產生一個隨機且唯一的資料夾名稱，例如 "work_folder_a1b2c3d4"
         unique_id = uuid.uuid4().hex[:8]
         work_dir = os.path.join(os.getcwd(), f"work_folder_{unique_id}")
-        
-        # 2. 直接建立新資料夾，完全不去碰舊的，這樣就不會發生存取被拒
         os.makedirs(work_dir)
         
-        # 3. 解壓縮到這個新的資料夾
         with zipfile.ZipFile(uploaded_zip, 'r') as z:
             z.extractall(work_dir)
             
-        # 4. 使用之前修好的 os.walk 版本來找資料
         df_result = get_clean_master_data(work_dir)
         
         if df_result is not None:
-            st.session_state['df_main'] = df_result
+            st.session_state['df_main'] = df_result # 把結果存起來
             st.success("合併完成！")
-            st.dataframe(df_result)
         else:
-            st.error("找不到順向/逆向資料夾，請確認壓縮檔內的結構。")
+            st.error("未能找到資料夾，請確認壓縮檔內的結構。")
+
+    # 2. 【關鍵】：把下載按鈕放在這裡，只要 session 裡面有資料，它就一定會出現
+    if 'df_main' in st.session_state:
+        df_result = st.session_state['df_main']
+        st.dataframe(df_result) # 順便顯示一下資料表
+        
+        from io import BytesIO
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_result.to_excel(writer, index=False)
+        
+        st.download_button(
+            label="📥 下載處理好的 Excel 檔",
+            data=output.getvalue(),
+            file_name="交通流量分析資料.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="final_download_btn"
+        )
