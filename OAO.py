@@ -177,7 +177,7 @@ def render_analysis_area(df_input, start_date):
 #################################################################
 def get_clean_master_data(base_path):
     all_data = []
-    for direction in ["順向", "逆向"]:
+    for direction in ["順樁", "逆樁"]:
         dir_path = os.path.join(base_path, direction)
         if not os.path.exists(dir_path): continue
             
@@ -603,11 +603,8 @@ with tab_analysis:
 with tab_merge:
     st.subheader("📂 批量資料夾匯入")
     uploaded_zip = st.file_uploader("請上傳 .zip 壓縮檔", type=["zip"])
-    
-    # 1. 執行合併的邏輯
     if uploaded_zip and st.button("執行合併與清洗", key="final_merge_btn"):
-        import zipfile
-        import uuid
+        
         
         unique_id = uuid.uuid4().hex[:8]
         work_dir = os.path.join(os.getcwd(), f"work_folder_{unique_id}")
@@ -619,15 +616,14 @@ with tab_merge:
         df_result = get_clean_master_data(work_dir)
         
         if df_result is not None:
-            st.session_state['df_main'] = df_result # 把結果存起來
+            st.session_state['df_main'] = df_result 
             st.success("合併完成！")
         else:
-            st.error("未能找到資料夾，請確認壓縮檔內的結構。")
+            st.error("未能找到資料夾，請確認壓縮檔內的檔案。")
 
-    # 2. 【關鍵】：把下載按鈕放在這裡，只要 session 裡面有資料，它就一定會出現
     if 'df_main' in st.session_state:
         df_result = st.session_state['df_main']
-        st.dataframe(df_result) # 順便顯示一下資料表
+        st.dataframe(df_result)
         
         from io import BytesIO
         output = BytesIO()
