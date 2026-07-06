@@ -12,6 +12,8 @@ import plotly.express as px
 import holidays
 from datetime import datetime
 import os
+import tempfile 
+import zipfile
 
 st.set_page_config(layout="wide", page_title="交通分析系統")
 st.title("交通路線路段速度視覺化")
@@ -588,40 +590,39 @@ with tab_analysis:
         rename_map = {'時間': '時間', 'Time': '時間', 'time': '時間',
                       '順向': '順向', 'forword': '順向', 'forward': '順向',
                       '逆向': '逆向', 'inverse': '逆向',
-                      '加總': '加總', 'add': '加總', '總': '加總'}
+                      '加總': '加總', 'add': '加總', '加總車當量': '加總'}
         df = df.rename(columns=rename_map)
 
         render_analysis_area(df, start_date)
     
 #####################################################################
+import uuid # 放在檔案最上方
+
 with tab_merge:
     st.subheader("📂 批量資料夾匯入")
-    folder_path = st.text_input("請輸入包含「順向/逆向」資料夾的路徑：")
-
-    folder_path = folder_path.strip() # 去除可能多出的空白
-    if not os.path.isdir(folder_path):
-        st.error(f"路徑無效，請檢查：{folder_path}")
+    uploaded_zip = st.file_uploader("請上傳資料夾的壓縮檔 (.zip)", type=["zip"])
     
-    if st.button("執行合併與清洗"):
-        if folder_path:
-            df_result = get_clean_master_data(folder_path)
-            if df_result is not None:
-                st.session_state['df_main'] = df_result
-                st.success("合併完成！")
-                st.dataframe(df_result) # 顯示表格
-                
-                # --- 新增：產生下載按鈕 ---
-                # 這裡將 df 轉成 Excel 二進位流
-                from io import BytesIO
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df_result.to_excel(writer, index=False)
-                
-                st.download_button(
-                    label="📥 下載處理好的 Excel 檔",
-                    data=output.getvalue(),
-                    file_name="交通流量分析資料.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            else:
-                st.error("未能讀取資料，請檢查路徑或檔案格式。")
+    if uploaded_zip and st.button("執行合併與清洗", key="final_merge_btn"):
+        import zipfile
+        import os
+        
+        # 1. 產生一個隨機且唯一的資料夾名稱，例如 "work_folder_a1b2c3d4"
+        unique_id = uuid.uuid4().hex[:8]
+        work_dir = os.path.join(os.getcwd(), f"work_folder_{unique_id}")
+        
+        # 2. 直接建立新資料夾，完全不去碰舊的，這樣就不會發生存取被拒
+        os.makedirs(work_dir)
+        
+        # 3. 解壓縮到這個新的資料夾
+        with zipfile.ZipFile(uploaded_zip, 'r') as z:
+            z.extractall(work_dir)
+            
+        # 4. 使用之前修好的 os.walk 版本來找資料
+        df_result = get_clean_master_data(work_dir)
+        
+        if df_result is not None:
+            st.session_state['df_main'] = df_result
+            st.success("合併完成！")
+            st.dataframe(df_result)
+        else:
+            st.error("找不到順向/逆向資料夾，請確認壓縮檔內的結構。")
